@@ -1,0 +1,47 @@
+import os
+import numpy as np
+import sounddevice as sd
+from scipy.spatial.distance import cosine
+import librosa
+import soundfile as sf
+
+# Load the reference audio files and extract their features
+reference_files = ['ref1.wav', 'ref2.wav', 'ref3.wav']
+reference_features = []
+for file in reference_files:
+    audio, sr = librosa.load(file)
+    features = librosa.feature.mfcc(audio, sr=sr)
+    reference_features.append(features)
+
+# Define the sampling rate and duration for the audio input
+fs = 44100
+duration = 15
+
+print("Recording...")
+myrecording = sd.rec(int(duration * fs), samplerate=fs, channels=1)
+
+# Wait for the audio input to complete
+sd.wait()
+
+# Save the recorded audio to a WAV file
+sf.write('recording.wav', myrecording, fs)
+print("Recording complete.")
+
+# Define a callback function to handle the audio input stream
+def audio_callback(indata, frames, time, status):
+    # Extract the features from the input audio
+    query_features = librosa.feature.mfcc(indata[:, 0], sr=fs)
+
+    # Compute the cosine similarity between the query features and the reference features
+    similarities = []
+    for ref_features in reference_features:
+        sim = 1 - cosine(ref_features.flatten(), query_features.flatten())
+        similarities.append(sim)
+
+    # Find the best match among the reference files
+    best_match = reference_files[np.argmax(similarities)]
+    print("Query file is most similar to: ", best_match)
+
+# Start the audio input stream with the specified sampling rate and duration
+with sd.InputStream(channels=1, blocksize=2048, samplerate=fs, callback=audio_callback):
+    sd.sleep(int(duration * 1000))
